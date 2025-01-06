@@ -4,6 +4,7 @@ import got from 'got';
 import { NPMPackage } from './types';
 
 type Package = { version: string; dependencies: Record<string, Package> };
+let flatDependencyList: any[] = [];
 
 /**
  * Attempts to retrieve package data from the npm registry and return it
@@ -11,6 +12,7 @@ type Package = { version: string; dependencies: Record<string, Package> };
 export const getPackage: RequestHandler = async function (req, res, next) {
   const { name, version } = req.params;
   const dependencyTree = {};
+  flatDependencyList = [];
   // review: Add new line before try block
   try {
     const npmPackage: NPMPackage = await got(
@@ -50,8 +52,30 @@ async function getDependencies(name: string, range: string): Promise<Package> {
     const newDeps = npmPackage.versions[v].dependencies;
     // review: As above, could use Promise.all and map to make requests concurrently.
     for (const [name, range] of Object.entries(newDeps ?? {})) {
-      dependencies[name] = await getDependencies(name, range);
+      const dependencyExists = flatDependencyList.find(
+        (depName) => name === depName,
+      );
+
+      console.log('🚀 ~ dependencyExists ~ name:', name);
+
+      console.log(
+        '🚀 ~ dependencyExists ~ dependencyExists:',
+        dependencyExists,
+      );
+
+      if (dependencyExists) {
+        return dependencies[name];
+      }
+
+      const subDependency = await getDependencies(name, range);
+      dependencies[name] = subDependency;
+      if (subDependency?.dependencies) {
+        flatDependencyList = flatDependencyList.concat(
+          Object.keys(subDependency.dependencies),
+        );
+      }
     }
+    console.log('🚀 ~ flatDependencyList:', flatDependencyList);
   }
 
   return { version: v ?? range, dependencies };
